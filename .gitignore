@@ -1,0 +1,13 @@
+
+
+# Project
+plan.md
+outline.md
+
+# Virtual Environment
+venv/
+
+# Python
+__pycache__/
+*.pyc
+.DS_Store
