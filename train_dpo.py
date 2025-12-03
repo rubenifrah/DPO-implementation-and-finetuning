@@ -14,12 +14,12 @@ from data_loader import get_dpo_dataset, DPODataCollator
 
 def main():
     parser = argparse.ArgumentParser(description="DPO Training")
-    parser.add_argument("--model_name", type=str, default="meta-llama/Meta-Llama-3-8B-Instruct")
-    parser.add_argument("--dataset_name", type=str, default="HuggingFaceH4/ultrafeedback_binarized")
-    parser.add_argument("--output_dir", type=str, default="./output")
-    parser.add_argument("--beta", type=float, default=0.1)
-    parser.add_argument("--lr", type=float, default=5e-7)
-    parser.add_argument("--batch_size", type=int, default=4)
+    parser.add_argument("--model_name", type=str, default="meta-llama/Meta-Llama-3-8B-Instruct", help="Model name (meta-llama/Meta-Llama-3-8B-Instruct, gpt2)")
+    parser.add_argument("--dataset_name", type=str, default="HuggingFaceH4/ultrafeedback_binarized", help="Dataset name")
+    parser.add_argument("--output_dir", type=str, default="./output", help="Output directory")
+    parser.add_argument("--beta", type=float, default=0.1, help="Beta parameter")
+    parser.add_argument("--lr", type=float, default=5e-7, help="Learning rate")
+    parser.add_argument("--batch_size", type=int, default=4, help="Batch size")
     parser.add_argument("--grad_accum", type=int, default=1)
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--max_length", type=int, default=1024)
