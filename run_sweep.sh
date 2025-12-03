@@ -25,12 +25,12 @@ for i in {0..7}; do
     # We use CUDA_VISIBLE_DEVICES to isolate the GPU for each process
     # and accelerate launch with num_processes=1 since we are running independent jobs
     CUDA_VISIBLE_DEVICES=$GPU_ID accelerate launch --num_processes 1 --mixed_precision bf16 train_dpo.py \
-        --model_name_or_path $MODEL \
+        --model_name $MODEL \
         --beta $BETA \
         --output_dir $OUTPUT_DIR \
         --batch_size 2 \
-        --gradient_accumulation_steps 8 \
-        --num_epochs 1 \
+        --grad_accum 8 \
+        --epochs 1 \
         --wandb_project "dpo-sweep-llama3-8b" \
         > "${OUTPUT_DIR}/train.log" 2>&1 &
         
