@@ -50,7 +50,7 @@ def main():
         args.model_name,
         torch_dtype=torch.bfloat16,
         use_cache=False,
-        attn_implementation="flash_attention_2" if torch.cuda.is_available() else "eager"
+        attn_implementation="eager"
     )
     policy_model.gradient_checkpointing_enable()
 
@@ -59,7 +59,7 @@ def main():
         args.model_name,
         torch_dtype=torch.bfloat16,
         use_cache=False,
-        attn_implementation="flash_attention_2" if torch.cuda.is_available() else "eager"
+        attn_implementation="eager"
     )
     ref_model.eval()
     ref_model.requires_grad_(False)

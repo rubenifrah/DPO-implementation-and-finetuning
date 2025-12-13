@@ -5,3 +5,5 @@ datasets
 wandb
 numpy
 tqdm
+sentencepiece
+protobuf

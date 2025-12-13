@@ -27,9 +27,17 @@ class DPODataCollator:
         chosen_labels = [item["chosen_labels"] for item in batch]
         rejected_labels = [item["rejected_labels"] for item in batch]
 
-        # Pad everything
-        batch_chosen = self._pad_batch(chosen_input_ids, chosen_attention_mask, chosen_labels)
-        batch_rejected = self._pad_batch(rejected_input_ids, rejected_attention_mask, rejected_labels)
+        # Calculate max length across BOTH chosen and rejected to ensure they match
+        max_len_chosen = max(len(x) for x in chosen_input_ids)
+        max_len_rejected = max(len(x) for x in rejected_input_ids)
+        global_max_len = max(max_len_chosen, max_len_rejected)
+        global_max_len = min(global_max_len, self.max_length)
+
+        # Pad everything to the SAME global_max_len
+
+        # Pad everything to the SAME global_max_len
+        batch_chosen = self._pad_batch(chosen_input_ids, chosen_attention_mask, chosen_labels, global_max_len)
+        batch_rejected = self._pad_batch(rejected_input_ids, rejected_attention_mask, rejected_labels, global_max_len)
 
         return {
             "policy_chosen_input_ids": batch_chosen["input_ids"],
@@ -40,11 +48,7 @@ class DPODataCollator:
             "policy_rejected_labels": batch_rejected["labels"],
         }
 
-    def _pad_batch(self, input_ids, attention_mask, labels):
-        # Find max length in this batch
-        max_len = max(len(x) for x in input_ids)
-        max_len = min(max_len, self.max_length)
-
+    def _pad_batch(self, input_ids, attention_mask, labels, max_len):
         padded_ids = []
         padded_mask = []
         padded_labels = []
