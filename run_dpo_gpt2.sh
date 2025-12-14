@@ -32,7 +32,7 @@ BETAS=(0.01 0.03 0.05 0.07 0.1 0.15 0.2 0.25 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0)
 # Get Beta for this specific job task
 BETA=${BETAS[$SLURM_ARRAY_TASK_ID]}
 
-MODEL="mistralai/Mistral-7B-Instruct-v0.3"
+MODEL="gpt2"
 OUTPUT_BASE="./output_sweep"
 OUTPUT_DIR="${OUTPUT_BASE}/beta_${BETA}"
 
@@ -46,9 +46,6 @@ mkdir -p $OUTPUT_DIR
 # Note: No need for CUDA_VISIBLE_DEVICES loop or background & 
 # Slurm assigns a unique GPU to this job automatically.
 
-# Use offline mode for W&B to avoid login errors
-export WANDB_MODE=offline
-
 # Force usage of the venv's accelerate to avoid system path issues
 ./venv/bin/accelerate launch --num_processes 1 --mixed_precision bf16 train_dpo.py \
     --model_name $MODEL \
@@ -57,7 +54,6 @@ export WANDB_MODE=offline
     --batch_size 2 \
     --grad_accum 8 \
     --epochs 1 \
-    --wandb_project "dpo-sweep-llama3-8b" \
     > "${OUTPUT_DIR}/train.log" 2>&1
 
 echo "Task $SLURM_ARRAY_TASK_ID (Beta=$BETA) Completed!"

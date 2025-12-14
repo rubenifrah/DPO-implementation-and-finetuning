@@ -11,3 +11,11 @@ venv/
 __pycache__/
 *.pyc
 .DS_Store
+
+GPT2/
+DPO_presentation/
+
+outline.md
+plan.md
+relevant_models.md
+adventure_log.md

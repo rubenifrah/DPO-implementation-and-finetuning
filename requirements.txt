@@ -2,7 +2,6 @@ torch
 transformers
 accelerate
 datasets
-wandb
 numpy
 tqdm
 sentencepiece

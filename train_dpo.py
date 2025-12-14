@@ -5,8 +5,9 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_scheduler
 from accelerate import Accelerator
 from tqdm import tqdm
-import wandb
 import numpy as np
+import json
+import time
 
 # Custom imports
 from dpo_loss import DPOLoss, get_batch_logps
@@ -24,7 +25,6 @@ def main():
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--max_length", type=int, default=1024)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--wandb_project", type=str, default="dpo-scratch")
     args = parser.parse_args()
 
     # Reproducibility
@@ -34,9 +34,17 @@ def main():
     # Accelerator
     accelerator = Accelerator(gradient_accumulation_steps=args.grad_accum)
 
+    # Setup Logging
     if accelerator.is_main_process:
-        wandb.init(project=args.wandb_project, config=args)
+        os.makedirs(args.output_dir, exist_ok=True)
+        log_file_path = os.path.join(args.output_dir, "training_log.jsonl")
         print(f"Training DPO on {args.model_name}")
+        print(f"Logging to {log_file_path}")
+        
+        # Log configuration
+        config = vars(args)
+        with open(log_file_path, "a") as f:
+            f.write(json.dumps({"type": "config", "data": config}) + "\n")
 
     # Load Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
@@ -152,13 +160,24 @@ def main():
                 global_step += 1
                 
                 if accelerator.is_main_process:
-                    wandb.log({
+                    # Local logging
+                    log_data = {
+                        "step": global_step,
+                        "epoch": epoch,
                         "loss": loss.item(),
                         "lr": scheduler.get_last_lr()[0],
                         "reward_chosen": chosen_rewards.mean().item(),
                         "reward_rejected": rejected_rewards.mean().item(),
-                        "margin": (chosen_rewards - rejected_rewards).mean().item()
-                    })
+                        "margin": (chosen_rewards - rejected_rewards).mean().item(),
+                        "timestamp": time.time()
+                    }
+                    
+                    with open(log_file_path, "a") as f:
+                        f.write(json.dumps({"type": "step", "data": log_data}) + "\n")
+                        
+                    # Optional: Print to console every N steps
+                    if global_step % 10 == 0:
+                        print(f"Step {global_step}: Loss={log_data['loss']:.4f}, Margin={log_data['margin']:.4f}")
 
             if global_step >= total_steps:
                 break
@@ -170,7 +189,7 @@ def main():
     unwrapped.save_pretrained(args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save)
     if accelerator.is_main_process:
         tokenizer.save_pretrained(args.output_dir)
-        wandb.finish()
+        print("Training finished!")
 
 if __name__ == "__main__":
     main()
