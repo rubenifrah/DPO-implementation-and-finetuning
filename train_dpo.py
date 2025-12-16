@@ -14,9 +14,7 @@ from dpo_loss import DPOLoss, get_batch_logps
 from data_loader import get_dpo_dataset, DPODataCollator
 
 def main():
-    # -------------------------------------------------------------------------
-    # 1. Configuration and Arguments
-    # -------------------------------------------------------------------------
+    # config
     parser = argparse.ArgumentParser(description="Direct Preference Optimization (DPO) Training Script")
     parser.add_argument("--model_name", type=str, default="meta-llama/Meta-Llama-3-8B-Instruct", help="The pretrained model to align (e.g. Llama-3, Mistral, GPT-2).")
     parser.add_argument("--dataset_name", type=str, default="HuggingFaceH4/ultrafeedback_binarized", help="HuggingFace dataset containing preferences.")
@@ -30,50 +28,46 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility.")
     args = parser.parse_args()
 
-    # Set seeds for reproducibility across runs
+    # fixed seed
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    # -------------------------------------------------------------------------
-    # 2. Setup Accelerator (Multi-GPU handling)
-    # -------------------------------------------------------------------------
-    # Accelerator handles device placement (CPU/GPU) and distributed training (DDP) automatically.
+    # setup accelerator
+    # Aacelerator handles device placement (CPU/GPU) and distributed training (DDP) 
+    # to better exploit Mesonet resources
     accelerator = Accelerator(gradient_accumulation_steps=args.grad_accum)
 
     if accelerator.is_main_process:
         print(f"Starting DPO training for: {args.model_name}")
         os.makedirs(args.output_dir, exist_ok=True)
         
-        # Setup local JSONL logging - preferred over WandB for simple cluster jobs
+        #  local JSONL logging 
         log_file_path = os.path.join(args.output_dir, "training_log.jsonl")
         print(f"Metrics will be logged to: {log_file_path}")
         
-        # Write the run configuration first
         with open(log_file_path, "a") as f:
             f.write(json.dumps({"type": "config", "data": vars(args)}) + "\n")
 
-    # -------------------------------------------------------------------------
-    # 3. Load Tokenizer and Models
-    # -------------------------------------------------------------------------
+    # load tokenizer and models
     print("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-    # Ensure we have a pad token (EOS acts as pad for Llama-family models)
+    # pad token 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    print("Loading Policy Model (Optimized)...")
-    # This is the model we will actually train.
+    print("Loading policy model...")
+    # model we will actually train
     policy_model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
-        torch_dtype=torch.bfloat16, # Use bfloat16 for stability on Ampere GPUs (A100)
-        use_cache=False,            # Disable KV cache during training (saves memory)
-        attn_implementation="eager" # Reliable attention implementation (avoids some FlashAttn quirks)
+        torch_dtype=torch.bfloat16, 
+        use_cache=False,            
+        attn_implementation="eager" 
     )
     # Enable gradient checkpointing to save VRAM (trades compute for memory)
     policy_model.gradient_checkpointing_enable()
 
-    print("Loading Reference Model (Frozen)...")
-    # This acts as the "baseline". We want to improve upon this model without deviating too far.
+    print("Loading reference model...")
+    # reference model (sft)
     ref_model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         torch_dtype=torch.bfloat16,
@@ -81,11 +75,9 @@ def main():
         attn_implementation="eager"
     )
     ref_model.eval()               # Set to evaluation mode
-    ref_model.requires_grad_(False) # Freeze weights completely
+    ref_model.requires_grad_(False) # Freeze weights completely (double safety)
 
-    # -------------------------------------------------------------------------
-    # 4. Prepare Dataset
-    # -------------------------------------------------------------------------
+    # prepare dataset
     print(f"Loading and processing dataset: {args.dataset_name}")
     dataset = get_dpo_dataset(tokenizer, dataset_name=args.dataset_name, max_length=args.max_length)
     collator = DPODataCollator(tokenizer, max_length=args.max_length)
@@ -98,19 +90,16 @@ def main():
         num_workers=4
     )
 
-    # -------------------------------------------------------------------------
-    # 5. Optimizer & Scheduling
-    # -------------------------------------------------------------------------
-    # RMSprop is often preferred for DPO/RLHF over AdamW, but AdamW works too.
+    # optimizer & scheduling
     optimizer = torch.optim.RMSprop(policy_model.parameters(), lr=args.lr)
 
-    # Hand over everything to Accelerator to prepare for distributed training
+    # Accelerator process
     policy_model, optimizer, dataloader = accelerator.prepare(policy_model, optimizer, dataloader)
     
-    # Move ref model to the correct device manually (accelerator doesn't prepare frozen models automatically)
+    # move ref model to accelerator device
     ref_model = ref_model.to(accelerator.device)
 
-    # Initialize our custom DPO Loss module
+    # Initialize our handwritten DPO Loss module
     dpo_loss_func = DPOLoss(beta=args.beta)
 
     # Scheduler setup
@@ -125,9 +114,7 @@ def main():
     )
     scheduler = accelerator.prepare(scheduler)
 
-    # -------------------------------------------------------------------------
-    # 6. Training Loop
-    # -------------------------------------------------------------------------
+    # training loop
     print(f"Starting training loop for {args.epochs} epochs ({total_steps} steps)...")
     progress_bar = tqdm(range(total_steps), disable=not accelerator.is_local_main_process)
     global_step = 0
@@ -188,13 +175,13 @@ def main():
                 scheduler.step()
                 optimizer.zero_grad()
 
-            # --- Logging (only on main process) ---
+            # logging
             if accelerator.sync_gradients:
                 progress_bar.update(1)
                 global_step += 1
                 
                 if accelerator.is_main_process:
-                    # Calculate metrics for logging
+                    # Calculate metrics 
                     current_margin = (chosen_rewards - rejected_rewards).mean().item()
                     current_loss = loss.item()
                     
@@ -220,9 +207,7 @@ def main():
             if global_step >= total_steps:
                 break
 
-    # -------------------------------------------------------------------------
-    # 7. Saving the Model
-    # -------------------------------------------------------------------------
+    # save model
     print("Training complete. Saving model...")
     accelerator.wait_for_everyone()
     

@@ -140,18 +140,14 @@ def main():
     total = wins + losses + ties
     win_rate = wins / total if total > 0 else 0
     
-    print("\n" + "="*40)
-    print("EVALUATION RESULTS")
-    print("="*40)
-    print(f"Total Comparisons: {total}")
-    print(f"Candidate Wins:    {wins}")
-    print(f"Baseline Wins:     {losses}")
-    print(f"Ties:              {ties}")
-    print("-" * 40)
-    print(f"Win Rate:          {win_rate:.2%}")
-    print("="*40 + "\n")
+    print("results\n -------------------")
+    print(f"total comparisons: {total}")
+    print(f"candidate wins:    {wins}")
+    print(f"baseline wins:     {losses}")
+    print(f"ties:              {ties}")
+    print(f"win rate:          {win_rate:.2%}")
     
-    # Save detailed logs
+    # save detailed logs
     with open(args.output_file, "w") as f:
         json.dump({
             "summary": {
