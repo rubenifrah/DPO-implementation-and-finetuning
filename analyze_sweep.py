@@ -8,18 +8,17 @@ def analyze_sweep(base_dir="."):
     """
     Analyzes the results of the Hyperparameter Sweep (Beta optimization) for GPT-2.
     
-    This script:
-    1. Scans the directory for 'beta_*' folders.
-    2. Reads the training logs.
-    3. Aggregates the metrics (Margin, Loss).
-    4. Generates a comparative plot to see which Beta value performs best.
     """
     
     # Locate all training logs from the sweep
-    log_files = glob.glob(os.path.join(base_dir, "beta_*/training_log.jsonl"))
+    log_files = glob.glob(os.path.join(base_dir, "GPT2/beta_*/training_log.jsonl"))
     
     results = {}
     print(f"Found {len(log_files)} log files from the sweep.")
+
+    #only keep one file every 2 betas
+    log_files = log_files[::2]
+    print(f"Only keeping {len(log_files)} log files.")
     
     for log_file in log_files:
         # Infer Beta value from the directory name (e.g. "./beta_0.1/training_log.jsonl")
@@ -70,9 +69,7 @@ def analyze_sweep(base_dir="."):
     # Sort betas for cleaner plotting
     sorted_betas = sorted(results.keys())
     
-    # -------------------------------------------------------------------------
-    # PRINT SUMMARY TABLE
-    # -------------------------------------------------------------------------
+    # summary table
     print("\n" + "="*40)
     print(f"{'Beta':<10} | {'Final Margin':<15} | {'Final Loss':<15}")
     print("-" * 40)
@@ -83,9 +80,7 @@ def analyze_sweep(base_dir="."):
         print(f"{beta:<10.2f} | {final_margin:<15.4f} | {final_loss:<15.4f}")
     print("="*40 + "\n")
 
-    # -------------------------------------------------------------------------
-    # PLOTTING
-    # -------------------------------------------------------------------------
+    # plotting
     
     def smooth(scalars, weight=0.9):
         """
@@ -102,7 +97,7 @@ def analyze_sweep(base_dir="."):
 
     plt.figure(figsize=(15, 10))
     
-    # --- Margin Plot ---
+    # margin plot
     plt.subplot(2, 1, 1)
     for beta in sorted_betas:
         smoothed_margins = smooth(results[beta]["margins"], weight=0.95)
@@ -113,7 +108,7 @@ def analyze_sweep(base_dir="."):
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.grid(True, alpha=0.3)
 
-    # --- Loss Plot ---
+    # loss plot
     plt.subplot(2, 1, 2)
     for beta in sorted_betas:
         smoothed_losses = smooth(results[beta]["losses"], weight=0.95)

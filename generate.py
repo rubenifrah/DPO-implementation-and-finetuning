@@ -7,9 +7,7 @@ import json
 import os
 
 def main():
-    # -------------------------------------------------------------------------
-    # 1. Configuration
-    # -------------------------------------------------------------------------
+    # configuration of the generation process
     parser = argparse.ArgumentParser(description="Response Generation Script for Evaluation")
     parser.add_argument("--model_name_or_path", type=str, required=True, help="Path to the model (e.g., ./output_dpo) or HuggingFace ID")
     parser.add_argument("--dataset_name", type=str, default="HuggingFaceH4/ultrafeedback_binarized", help="Dataset containing the prompts")
@@ -20,13 +18,11 @@ def main():
     parser.add_argument("--limit", type=int, default=None, help="Limit number of samples (useful for debugging)")
     args = parser.parse_args()
 
-    # -------------------------------------------------------------------------
-    # 2. Model Loading
-    # -------------------------------------------------------------------------
+    # loading the tokenizer and model
     print(f"Loading tokenizer: {args.model_name_or_path}")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
     
-    # Ensure pad token exists (Llama/Mistral usually rely on EOS)
+    # Ensure pad token exists (Llama/Mistral )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
@@ -34,17 +30,15 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name_or_path,
         torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
-        device_map="auto" # Automatically disperses model across available GPUs
+        device_map="auto" # automatically disperses model across available GPUs
     )
-    model.eval() # Set to evaluation mode (disables dropout, etc.)
+    model.eval() # set to evaluation mode (disables dropout, etc.)
 
-    # -------------------------------------------------------------------------
-    # 3. Dataset Preparation
-    # -------------------------------------------------------------------------
+    # loading the dataset
     print(f"Loading dataset: {args.dataset_name} ({args.split})")
     dataset = load_dataset(args.dataset_name, split=args.split)
     
-    # Optional: Debug with a smaller subset
+    # limit the number of samples (debugging)
     if args.limit:
         print(f"LIMITING to {args.limit} samples.")
         dataset = dataset.select(range(args.limit))
@@ -54,19 +48,16 @@ def main():
     results = []
     prompts = dataset["prompt"]
     
-    # -------------------------------------------------------------------------
-    # 4. Generation Loop
-    # -------------------------------------------------------------------------
-    # We iterate in batches for efficiency
+    # iterate in batches for efficiency
     for i in tqdm(range(0, len(prompts), args.batch_size)):
         batch_prompts = prompts[i : i + args.batch_size]
         
-        # --- Prompt Formatting ---
-        # Models expect a specific chat structure (e.g., [INST] Prompt [/INST]).
-        # We use the tokenizer's chat template to apply this correct formatting.
+        # prompt formatting
+        # models expect a specific chat structure (e.g., [INST] Prompt [/INST]).
+        # we use the tokenizer's chat template to apply this correct formatting.
         formatted_prompts = []
         for p in batch_prompts:
-            # If the prompt is a simple string, we wrap it in a "user" message object
+            # if the prompt is a simple string, we wrap it in a "user" message object
             if isinstance(p, str):
                 messages = [{"role": "user", "content": p}]
             else:
@@ -84,11 +75,11 @@ def main():
                     text = messages
             formatted_prompts.append(text)
 
-        # --- Tokenization ---
-        # Convert formatted strings to input tensors
+        # tokenization
+        # convert formatted strings to input tensors
         inputs = tokenizer(formatted_prompts, return_tensors="pt", padding=True, truncation=True).to(model.device)
         
-        # --- Inference ---
+        # inference
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
@@ -98,11 +89,11 @@ def main():
                 pad_token_id=tokenizer.pad_token_id
             )
         
-        # --- Decoding ---
-        # Convert output tokens back to text
+        # decoding
+        # convert output tokens back to text
         generated_texts = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         
-        # Store results
+        # store results
         for prompt, full_text in zip(batch_prompts, generated_texts):
             # In a real pipeline, we might strip the input prompt from the output here.
             # For now, we save the full text to be safe.
@@ -111,15 +102,13 @@ def main():
                 "generated_text": full_text
             })
 
-    # -------------------------------------------------------------------------
-    # 5. Saving Results
-    # -------------------------------------------------------------------------
+    # save results
     os.makedirs(os.path.dirname(args.output_file) if os.path.dirname(args.output_file) else ".", exist_ok=True)
     with open(args.output_file, "w") as f:
         for item in results:
             f.write(json.dumps(item) + "\n")
     
-    print(f"Success! Saved {len(results)} generations to {args.output_file}")
+    print(f"Success! saved {len(results)} generations to {args.output_file}")
 
 if __name__ == "__main__":
     main()
