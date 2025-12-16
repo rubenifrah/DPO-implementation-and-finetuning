@@ -26,3 +26,4 @@ extract_pdf.py
 # job files
 run_eval.sh
 run_dpo_gpt2.sh
+interactive_demo.py
