@@ -14,17 +14,14 @@ def analyze_mistral(base_dir="mistral_DPO"):
     3. Plots them all in a nice 4-subplot figure.
     """
     
-    # -------------------------------------------------------------------------
-    # 1. Parsing Logs
-    # -------------------------------------------------------------------------
-    # We expect files named like "mistral_DPO/beta_0.1.jsonl"
+    # log loading
     log_files = glob.glob(os.path.join(base_dir, "beta_*.jsonl"))
     
     results = {}
     print(f"Found {len(log_files)} log files in {base_dir}")
     
     for log_file in log_files:
-        # Parse beta from filename (e.g. "beta_0.01.jsonl" -> 0.01)
+        # parse beta from filename (e.g. "beta_0.01.jsonl" -> 0.01)
         filename = os.path.basename(log_file)
         beta_str = filename.replace("beta_", "").replace(".jsonl", "")
         try:
@@ -75,12 +72,10 @@ def analyze_mistral(base_dir="mistral_DPO"):
             "accuracies": accuracies,
         }
 
-    # Sort betas so the legend is clean
+    # sort betas so the legend is clean
     sorted_betas = sorted(results.keys())
     
-    # -------------------------------------------------------------------------
-    # 2. Helper for Smoothing
-    # -------------------------------------------------------------------------
+    # helper for smoothing
     def smooth(scalars, weight=0.9):
         """
         Exponential Moving Average (EMA) to make plots less noisy.
@@ -96,9 +91,7 @@ def analyze_mistral(base_dir="mistral_DPO"):
             last = smoothed_val
         return smoothed
 
-    # -------------------------------------------------------------------------
-    # 3. Print Summary Table
-    # -------------------------------------------------------------------------
+    #  summary table
     print("\n" + "="*80)
     print(f"{'Beta':<10} | {'Final Margin':<15} | {'Final Loss':<15} | {'Final Acc':<15}")
     print("-" * 80)
@@ -111,13 +104,10 @@ def analyze_mistral(base_dir="mistral_DPO"):
         print(f"{beta:<10.2f} | {final_margin:<15.4f} | {final_loss:<15.4f} | {final_acc:<15.4%}")
     print("="*80 + "\n")
 
-    # -------------------------------------------------------------------------
-    # 4. Visualization
-    # -------------------------------------------------------------------------
-    # We now have 4 subplots (including the new KL one)
+    # visualization and figure creation
     plt.figure(figsize=(15, 16)) # Taller figure
     
-    # --- Plot 1: Margin ---
+    # margin plot
     plt.subplot(4, 1, 1)
     for beta in sorted_betas:
         smoothed_margins = smooth(results[beta]["margins"], weight=0.95)
@@ -127,7 +117,7 @@ def analyze_mistral(base_dir="mistral_DPO"):
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.grid(True, alpha=0.3)
 
-    # --- Plot 2: Loss ---
+    # loss plot
     plt.subplot(4, 1, 2)
     for beta in sorted_betas:
         smoothed_losses = smooth(results[beta]["losses"], weight=0.95)
@@ -137,10 +127,10 @@ def analyze_mistral(base_dir="mistral_DPO"):
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.grid(True, alpha=0.3)
     
-    # --- Plot 3: Accuracy ---
+    # accuracy plot
     plt.subplot(4, 1, 3)
     for beta in sorted_betas:
-        # Use higher smoothing (0.99) for accuracy because it's binary (0/1) and noisy
+        # smoothing (0.99) for accuracy (may be noisy)
         smoothed_acc = smooth(results[beta]["accuracies"], weight=0.99) 
         plt.plot(results[beta]["steps"], smoothed_acc, label=f"Beta={beta}")
     plt.title("Training Accuracy (P(chosen > rejected))")
@@ -148,11 +138,11 @@ def analyze_mistral(base_dir="mistral_DPO"):
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.grid(True, alpha=0.3)
 
-    # --- Plot 4: Implicit KL Divergence ---
+    # kl divergence plot
     plt.subplot(4, 1, 4)
     for beta in sorted_betas:
         # In DPO, the 'Reward' is actually defines as: beta * (log(pi) - log(ref))
-        # So Reward / beta = log(pi/ref), which is the pointwise KL divergence.
+        # we derive the KL divergence from the reward by dividing by beta
         kl_divs = [r / beta for r in results[beta]["rewards_chosen"]]
         smoothed_kl = smooth(kl_divs, weight=0.95)
         plt.plot(results[beta]["steps"], smoothed_kl, label=f"Beta={beta}")
