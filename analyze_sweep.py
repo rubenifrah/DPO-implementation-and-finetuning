@@ -5,19 +5,30 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 def analyze_sweep(base_dir="."):
+    """
+    Analyzes the results of the Hyperparameter Sweep (Beta optimization) for GPT-2.
+    
+    This script:
+    1. Scans the directory for 'beta_*' folders.
+    2. Reads the training logs.
+    3. Aggregates the metrics (Margin, Loss).
+    4. Generates a comparative plot to see which Beta value performs best.
+    """
+    
+    # Locate all training logs from the sweep
     log_files = glob.glob(os.path.join(base_dir, "beta_*/training_log.jsonl"))
     
     results = {}
-    
-    print(f"Found {len(log_files)} log files.")
+    print(f"Found {len(log_files)} log files from the sweep.")
     
     for log_file in log_files:
-        # Extract beta from dirname
+        # Infer Beta value from the directory name (e.g. "./beta_0.1/training_log.jsonl")
         dirname = os.path.dirname(log_file)
         beta_str = os.path.basename(dirname).replace("beta_", "")
         try:
             beta = float(beta_str)
         except ValueError:
+            print(f"Skipping {dirname}, could not parse beta.")
             continue
             
         steps = []
@@ -26,6 +37,7 @@ def analyze_sweep(base_dir="."):
         rewards_chosen = []
         rewards_rejected = []
         
+        # Read the log file
         with open(log_file, "r") as f:
             for line in f:
                 try:
@@ -44,19 +56,23 @@ def analyze_sweep(base_dir="."):
             print(f"Warning: No steps found in {log_file}")
             continue
             
+        # Store results
         results[beta] = {
             "steps": steps,
             "margins": margins,
             "losses": losses,
             "rewards_chosen": rewards_chosen,
             "rewards_rejected": rewards_rejected,
+            # Calculate final margin (average of last 10 steps for stability)
             "final_margin": np.mean(margins[-10:]) if len(margins) >= 10 else margins[-1]
         }
 
-    # Sort by beta
+    # Sort betas for cleaner plotting
     sorted_betas = sorted(results.keys())
     
-    # Print Summary Table
+    # -------------------------------------------------------------------------
+    # PRINT SUMMARY TABLE
+    # -------------------------------------------------------------------------
     print("\n" + "="*40)
     print(f"{'Beta':<10} | {'Final Margin':<15} | {'Final Loss':<15}")
     print("-" * 40)
@@ -67,8 +83,15 @@ def analyze_sweep(base_dir="."):
         print(f"{beta:<10.2f} | {final_margin:<15.4f} | {final_loss:<15.4f}")
     print("="*40 + "\n")
 
-    # Smoothing function
+    # -------------------------------------------------------------------------
+    # PLOTTING
+    # -------------------------------------------------------------------------
+    
     def smooth(scalars, weight=0.9):
+        """
+        Simple Exponential Moving Average (EMA) for smoother plots.
+        """
+        if not scalars: return []
         last = scalars[0]
         smoothed = list()
         for point in scalars:
@@ -77,13 +100,11 @@ def analyze_sweep(base_dir="."):
             last = smoothed_val
         return smoothed
 
-    # Plotting
     plt.figure(figsize=(15, 10))
     
-    # Subplot 1: Margin
+    # --- Margin Plot ---
     plt.subplot(2, 1, 1)
     for beta in sorted_betas:
-        # smooth data
         smoothed_margins = smooth(results[beta]["margins"], weight=0.95)
         plt.plot(results[beta]["steps"], smoothed_margins, label=f"Beta={beta}")
     plt.title("DPO Margin (Smoothed)")
@@ -92,7 +113,7 @@ def analyze_sweep(base_dir="."):
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.grid(True, alpha=0.3)
 
-    # Subplot 2: Loss
+    # --- Loss Plot ---
     plt.subplot(2, 1, 2)
     for beta in sorted_betas:
         smoothed_losses = smooth(results[beta]["losses"], weight=0.95)
