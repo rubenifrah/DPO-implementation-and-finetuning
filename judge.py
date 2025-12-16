@@ -31,9 +31,7 @@ Which response is better? Output only the single letter without any comment: "A"
     ]
 
 def main():
-    # -------------------------------------------------------------------------
-    # 1. Configuration
-    # -------------------------------------------------------------------------
+    # configuration arguments
     parser = argparse.ArgumentParser(description="LLM-as-a-Judge Evaluation Script")
     parser.add_argument("--baseline_file", type=str, required=True, help="JSONL file containing responses from the Baseline model (e.g., SFT).")
     parser.add_argument("--candidate_file", type=str, required=True, help="JSONL file containing responses from the Candidate model (e.g., DPO).")
@@ -41,9 +39,7 @@ def main():
     parser.add_argument("--output_file", type=str, default="judge_results.json", help="Where to save the win-rate analysis.")
     args = parser.parse_args()
 
-    # -------------------------------------------------------------------------
-    # 2. Load Data
-    # -------------------------------------------------------------------------
+    # load data
     print("Loading response files...")
     with open(args.baseline_file, "r") as f:
         baseline_data = [json.loads(line) for line in f]
@@ -51,12 +47,10 @@ def main():
     with open(args.candidate_file, "r") as f:
         candidate_data = [json.loads(line) for line in f]
     
-    # Sanity check: comparisons must be apples-to-apples
+    # check if files have the same number of samples
     assert len(baseline_data) == len(candidate_data), "Error: Files must have the same number of samples to compare!"
     
-    # -------------------------------------------------------------------------
-    # 3. Load Judge Model
-    # -------------------------------------------------------------------------
+    # load judge model
     print(f"Loading Judge Model: {args.judge_model}")
     tokenizer = AutoTokenizer.from_pretrained(args.judge_model)
     model = AutoModelForCausalLM.from_pretrained(
@@ -67,25 +61,22 @@ def main():
     model.eval()
 
     # Metrics
-    wins = 0      # Candidate wins
-    losses = 0    # Candidate loses (Baseline wins)
+    wins = 0    # candidate wins
+    losses = 0    # candidate loses (baseline wins)
     ties = 0
     results = []
 
     print("Starting evaluation...")
     
-    # -------------------------------------------------------------------------
-    # 4. Evaluation Loop
-    # -------------------------------------------------------------------------
+    # evaluation loop
     for i in tqdm(range(len(baseline_data))):
         prompt = baseline_data[i]["prompt"]
         resp_a = baseline_data[i]["generated_text"] # Originally Baseline
         resp_b = candidate_data[i]["generated_text"] # Originally Candidate
         
-        # --- Mitigate Position Bias ---
-        # LLMs often have a "bias towards the first option" (or sometimes the second).
-        # We flip a coin. 
-        # If swapped=True: Response A presented to judge is Candidate (resp_b), Response B is Baseline (resp_a).
+        # mitigate position bias
+        # we have seen that LLMs often have a "bias towards the first option" (or sometimes the second).
+        # to counteract this, we use a probability of 50% to swap the responses order.
         if random.random() > 0.5:
             swapped = True
             messages = get_judge_messages(prompt, resp_b, resp_a)
@@ -97,7 +88,7 @@ def main():
         input_text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
         
-        # Validation generation
+        #validation generation
         with torch.no_grad():
             outputs = model.generate(
                 **inputs, 
@@ -107,31 +98,29 @@ def main():
                 temperature=0.0
             )
             
-        # Parse output
+        # output
         generated_tokens = outputs[0][inputs.input_ids.shape[1]:]
         judgment = tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
         
-        # Heuristic to find the verdict
+        # Heuristic simple code to find the verdict within the judge's output
         if "A" in judgment and "B" not in judgment:
             winner = "A"
         elif "B" in judgment and "A" not in judgment:
             winner = "B"
         else:
-            winner = "Tie" # If judge is confused or outputs both
+            winner = "Tie" # If judge is confused or outputs both (or our code fails)
             
-        # --- Map back to real identity ---
+        # Map back to real identity as we swapped the responses order
         if swapped:
-            # If swapped, "A" was actually Candidate, "B" was Baseline
             if winner == "A": final_winner = "Candidate" 
             elif winner == "B": final_winner = "Baseline"
             else: final_winner = "Tie"
         else:
-            # Standard order
             if winner == "A": final_winner = "Baseline"
             elif winner == "B": final_winner = "Candidate"
             else: final_winner = "Tie"
             
-        # Update Stats
+        # update   stats
         if final_winner == "Candidate":
             wins += 1
         elif final_winner == "Baseline":
@@ -147,9 +136,7 @@ def main():
             "raw_judge_output": judgment
         })
 
-    # -------------------------------------------------------------------------
-    # 5. Final Report
-    # -------------------------------------------------------------------------
+    # Final json report of the winrate analysis
     total = wins + losses + ties
     win_rate = wins / total if total > 0 else 0
     

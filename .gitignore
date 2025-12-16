@@ -23,3 +23,7 @@ adventure_log.md
 
 test_dry_run.py
 extract_pdf.py
+
+# job files
+run_eval.sh
+run_dpo_gpt2.sh
